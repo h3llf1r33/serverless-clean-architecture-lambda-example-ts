@@ -1,0 +1,179 @@
+service: sca-lambda-example
+build:
+  esbuild: false
+frameworkVersion: '4.4.18'
+
+plugins:
+  - serverless-esbuild
+
+custom:
+  config: ${file(./config/config.${self:provider.stage}.yml)}
+  esbuild:
+    bundle: true
+    minify: true
+    sourcemap: true
+    minifyIdentifiers: true
+    minifySyntax: true
+    minifyWhitespace: true
+    treeShaking: true
+    platform: 'node'
+    target: 'node20'
+    define:
+      'require.resolve': undefined
+    concurrency: 10
+    watch:
+      pattern: [ 'src/**/*.ts' ]
+
+provider:
+  profile: ${opt:stage, 'dev'}
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'eu-central-1'}
+  environment:
+    NODE_ENV: ${self:provider.stage}
+    POSTS_TABLE: ${self:custom.config.tableName}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:BatchGetItem
+            - dynamodb:BatchWriteItem
+          Resource:
+            - !GetAtt PostsTable.Arn
+            - !Join [ '', [ !GetAtt PostsTable.Arn, '/index/*' ] ]
+
+functions:
+  getInfo:
+    handler: handler.getInfo
+    events:
+      - http:
+          path: info
+          method: get
+          cors: true
+          private: false
+  readPostDynamoDb:
+    handler: handler.readPostDynamoDbHandler
+    events:
+      - http:
+          path: /${self:custom.config.dynamoDbUriPrefix}/posts/{id}
+          method: get
+          cors: true
+          private: false
+  readListPostDynamoDb:
+    handler: handler.readListPostDynamoDbHandler
+    events:
+      - http:
+          path: /${self:custom.config.dynamoDbUriPrefix}/posts
+          method: get
+          cors: true
+          private: false
+  createPostDynamoDb:
+    handler: handler.createPostDynamoDbHandler
+    events:
+      - http:
+          path: /${self:custom.config.dynamoDbUriPrefix}/posts
+          method: post
+          cors: true
+          private: false
+  updatePostDynamoDb:
+    handler: handler.updatePostDynamoDbHandler
+    events:
+      - http:
+          path: /${self:custom.config.dynamoDbUriPrefix}/posts/{id}
+          method: patch
+          cors: true
+          private: false
+  deletePostDynamoDb:
+    handler: handler.deletePostDynamoDbHandler
+    events:
+      - http:
+          path: /${self:custom.config.dynamoDbUriPrefix}/posts/{id}
+          method: delete
+          cors: true
+          private: false
+
+  readPost:
+    handler: handler.readPostHandler
+    events:
+      - http:
+          path: /${self:custom.config.jsonPlaceholderUriPrefix}/posts/{id}
+          method: get
+          cors: true
+          private: false
+  readListPost:
+    handler: handler.readListPostHandler
+    events:
+      - http:
+          path: /${self:custom.config.jsonPlaceholderUriPrefix}/posts
+          method: get
+          cors: true
+          private: false
+  createPost:
+    handler: handler.createPostHandler
+    events:
+      - http:
+          path: /${self:custom.config.jsonPlaceholderUriPrefix}/posts
+          method: post
+          cors: true
+          private: false
+  updatePost:
+    handler: handler.updatePostHandler
+    events:
+      - http:
+          path: /${self:custom.config.jsonPlaceholderUriPrefix}/posts/{id}
+          method: patch
+          cors: true
+          private: false
+  deletePost:
+    handler: handler.deletePostHandler
+    events:
+      - http:
+          path: /${self:custom.config.jsonPlaceholderUriPrefix}/posts/{id}
+          method: delete
+          cors: true
+          private: false
+
+resources:
+  Resources:
+    PostsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.config.tableName}
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: N
+          - AttributeName: userId
+            AttributeType: N
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: UserIdIndex
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+            ProvisionedThroughput:
+              ReadCapacityUnits: 5
+              WriteCapacityUnits: 5
+        BillingMode: PROVISIONED
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}

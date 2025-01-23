@@ -1,0 +1,3 @@
+tableName: posts-table
+dynamoDbUriPrefix: dynamodb
+jsonPlaceholderUriPrefix: json-placeholder
